@@ -1,0 +1,12 @@
+src
+tests
+.agents
+skills-lock.json
+tsconfig.json
+tsup.config.ts
+vitest.config.ts
+.github
+coverage
+*.tsbuildinfo
+node_modules
+.env*
