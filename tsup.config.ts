@@ -6,16 +6,7 @@ export default defineConfig({
     client: "src/client.ts",
   },
   format: ["esm", "cjs"],
-  dts: {
-    resolve: true,
-    entry: {
-      index: "src/index.ts",
-      client: "src/client.ts",
-    },
-    compilerOptions: {
-      composite: false,
-    },
-  },
+  dts: true,
   tsconfig: "tsconfig.build.json",
   clean: true,
   sourcemap: true,

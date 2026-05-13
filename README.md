@@ -91,48 +91,110 @@ The plugin exposes these endpoints under `/ton-connect`:
 
 ### Wiring with `@tonconnect/ui-react`
 
+The plugin works with any TON Connect client, but the official
+`@tonconnect/ui-react` package is the smoothest fit. There are two
+pieces: refresh the challenge the wallet will sign, and handle the
+`ton_proof` reply when the wallet connects.
+
 ```tsx
-import { TonConnectUIProvider, useTonConnectUI } from "@tonconnect/ui-react";
+import {
+  useTonConnectUI,
+  useTonWallet,
+} from "@tonconnect/ui-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { authClient } from "./auth-client";
 
-function SignInButton() {
+// Refresh the challenge roughly every 9 min — TON Connect signatures
+// are valid for 15 min in this plugin, so we stay comfortably fresh.
+const REFRESH_INTERVAL_MS = 9 * 60 * 1000;
+
+export function SignInButton() {
   const [tonConnectUI] = useTonConnectUI();
+  const wallet = useTonWallet();
+  const [authed, setAuthed] = useState(false);
+  const firstLoad = useRef(true);
 
-  // Point TON Connect at your backend challenge endpoint.
-  // The wallet will sign whatever the server returns.
-  tonConnectUI.setConnectRequestParametersCallback(async () => {
-    const { data } = await authClient.tonConnect.challenge();
-    return data?.payload
-      ? { state: "ready", value: { tonProof: data.payload } }
-      : { state: "loading" };
-  });
-
-  // Subscribe to wallet connection events.
-  tonConnectUI.onStatusChange(async (wallet) => {
-    const proof = wallet?.connectItems?.tonProof;
-    if (!wallet || !proof || !("proof" in proof)) return;
-
-    const res = await authClient.tonConnect.verify({
-      address: wallet.account.address,
-      network: wallet.account.chain,
-      public_key: wallet.account.publicKey!,
-      proof: {
-        timestamp: proof.proof.timestamp,
-        domain: proof.proof.domain,
-        payload: proof.proof.payload,
-        signature: proof.proof.signature,
-        state_init: wallet.account.walletStateInit,
-      },
-    });
-
-    if (res.error) {
-      await tonConnectUI.disconnect();
+  // (1) Keep the wallet supplied with a fresh challenge payload.
+  const refreshChallenge = useCallback(async () => {
+    if (firstLoad.current) {
+      // Show the wallet a "loading" state while we hit our backend.
+      tonConnectUI.setConnectRequestParameters({ state: "loading" });
+      firstLoad.current = false;
     }
-  });
 
+    const { data, error } = await authClient.tonConnect.challenge();
+
+    if (error || !data?.payload) {
+      tonConnectUI.setConnectRequestParameters(null);
+      return;
+    }
+
+    tonConnectUI.setConnectRequestParameters({
+      state: "ready",
+      value: { tonProof: data.payload },
+    });
+  }, [tonConnectUI]);
+
+  useEffect(() => {
+    void refreshChallenge();
+    const id = setInterval(() => {
+      void refreshChallenge();
+    }, REFRESH_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [refreshChallenge]);
+
+  // (2) Verify the ton_proof once the wallet sends it back.
+  useEffect(() => {
+    return tonConnectUI.onStatusChange(async (w) => {
+      if (!w) {
+        setAuthed(false);
+        return;
+      }
+      const item = w.connectItems?.tonProof;
+      if (!item || !("proof" in item)) return;
+
+      const { error } = await authClient.tonConnect.verify({
+        address: w.account.address,
+        network: w.account.chain,
+        public_key: w.account.publicKey!,
+        proof: {
+          timestamp: item.proof.timestamp,
+          domain: item.proof.domain,
+          payload: item.proof.payload,
+          signature: item.proof.signature,
+          state_init: w.account.walletStateInit,
+        },
+      });
+
+      if (error) {
+        await tonConnectUI.disconnect();
+        setAuthed(false);
+        return;
+      }
+      setAuthed(true);
+    });
+  }, [tonConnectUI]);
+
+  if (authed) {
+    return (
+      <button onClick={() => tonConnectUI.disconnect()}>
+        Disconnect {wallet?.account.address.slice(0, 6)}…
+      </button>
+    );
+  }
   return <button onClick={() => tonConnectUI.openModal()}>Sign in</button>;
 }
 ```
+
+Two patterns worth noting here:
+
+- `setConnectRequestParameters` is called from a `useEffect` (plus an
+  interval). Calling it on every render would force React to re-register
+  the request mid-flight and confuse the wallet UI.
+- `onStatusChange` returns an **unsubscribe function**, and `useEffect`
+  cleanups run that function when the component unmounts. Otherwise
+  every remount stacks another listener and your `/verify` endpoint gets
+  called multiple times per connect.
 
 ## What gets stored
 
@@ -183,6 +245,68 @@ if (!result.ok) {
   console.warn("ton_proof rejected:", result.reason);
 }
 ```
+
+## Runtime requirements (Buffer and friends)
+
+`ton-better-auth` depends on `@ton/core`, `@ton/crypto`, `@ton/ton`, and
+`tweetnacl`. These libraries expect Node.js primitives — primarily the
+global `Buffer` — to be available at runtime.
+
+- **Node.js 18+** — no setup needed.
+- **Bun** — `Buffer` is provided out of the box.
+- **Cloudflare Workers** — enable the Node.js compatibility flag:
+  ```toml
+  # wrangler.toml
+  compatibility_flags = ["nodejs_compat"]
+  compatibility_date = "2024-09-23"
+  ```
+- **Vercel Edge Runtime** — the edge runtime does not polyfill `Buffer`.
+  Run auth routes on the Node.js runtime (the default) by not setting
+  `export const runtime = "edge"` on the handler file, or add a polyfill
+  (see below).
+- **Deno** — `Buffer` is exposed via `node:buffer`; most bundlers handle
+  this automatically, but set `"nodeModulesDir": true` in `deno.json`
+  or import it explicitly at entry:
+  ```ts
+  import { Buffer } from "node:buffer";
+  globalThis.Buffer ??= Buffer;
+  ```
+- **Browser** — this plugin is designed for **server-side use**. If you
+  are running parts of it in the browser (for example, pre-verifying a
+  signature client-side before submitting it), you need to shim `Buffer`
+  through your bundler:
+  ```bash
+  npm i -D buffer
+  ```
+  Vite:
+  ```ts
+  // vite.config.ts
+  import { defineConfig } from "vite";
+  import { nodePolyfills } from "vite-plugin-node-polyfills";
+  export default defineConfig({
+    plugins: [nodePolyfills({ globals: { Buffer: true } })],
+  });
+  ```
+  Webpack 5:
+  ```ts
+  // webpack.config.js
+  resolve: {
+    fallback: { buffer: require.resolve("buffer/") },
+  },
+  plugins: [
+    new webpack.ProvidePlugin({ Buffer: ["buffer", "Buffer"] }),
+  ],
+  ```
+  Next.js (edge-only routes): add a polyfill at the top of the handler:
+  ```ts
+  import { Buffer } from "buffer";
+  globalThis.Buffer = globalThis.Buffer ?? Buffer;
+  ```
+
+If `Buffer` is missing, you will see errors like
+`ReferenceError: Buffer is not defined` the first time the plugin
+touches `ton_proof`. None of this applies to a normal Next.js / Express
+/ SvelteKit server running on Node.js.
 
 ## License
 

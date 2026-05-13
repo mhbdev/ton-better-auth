@@ -1,11 +1,19 @@
 import js from "@eslint/js";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
+import globals from "globals";
 
 /** @type {import("eslint").Linter.Config[]} */
 export default [
   {
-    ignores: ["dist/**", "node_modules/**", "coverage/**"],
+    ignores: [
+      "dist/**",
+      "node_modules/**",
+      "coverage/**",
+      "*.config.ts",
+      "*.config.mjs",
+      "*.config.js",
+    ],
   },
   js.configs.recommended,
   {
@@ -17,14 +25,16 @@ export default [
         sourceType: "module",
         project: "./tsconfig.json",
       },
+      globals: {
+        ...globals.node,
+        ...globals.es2022,
+      },
     },
     plugins: {
       "@typescript-eslint": tsPlugin,
     },
     rules: {
       ...tsPlugin.configs["recommended-type-checked"].rules,
-      // We lean on TypeScript strictness; these ESLint-only rules are
-      // noisy or duplicative for a plugin package.
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-unused-vars": [
         "error",
@@ -43,16 +53,22 @@ export default [
         "error",
         { allowNumber: true, allowBoolean: true },
       ],
+      // The plugin ships lots of legitimate fall-through type-narrowing
+      // patterns; `no-unsafe-*` is too strict for well-typed external
+      // libraries that return `any` (e.g. Kysely rows, Better Auth's
+      // plugin adapter calls).
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
       "no-console": ["warn", { allow: ["warn", "error"] }],
     },
   },
   {
     files: ["tests/**/*.ts"],
     rules: {
-      // Test code tends to use `!` and dynamic expectations; relax a bit.
       "@typescript-eslint/no-non-null-assertion": "off",
-      "@typescript-eslint/no-unsafe-assignment": "off",
-      "@typescript-eslint/no-unsafe-member-access": "off",
     },
   },
 ];
