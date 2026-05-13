@@ -1,0 +1,29 @@
+{
+  "name": "ton-better-auth",
+  "version": "0.1.1",
+  "description": "Skills for integrating TON Connect wallet authentication with Better Auth",
+  "author": "mhbdev",
+  "license": "MIT",
+  "repository": "https://github.com/mhbdev/ton-better-auth",
+  "skills": [
+    {
+      "name": "ton-better-auth",
+      "path": "./ton-better-auth",
+      "description": "Integrate TON Connect wallet authentication into Better Auth projects"
+    },
+    {
+      "name": "ton-better-auth-runtime",
+      "path": "./ton-better-auth-runtime",
+      "description": "Handle runtime compatibility for ton-better-auth across different environments"
+    }
+  ],
+  "keywords": [
+    "ton",
+    "ton-connect",
+    "better-auth",
+    "authentication",
+    "wallet",
+    "web3",
+    "blockchain"
+  ]
+}
