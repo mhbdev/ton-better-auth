@@ -194,6 +194,13 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
           const payload = Buffer.from(raw).toString("hex");
           const expiresAt = new Date(Date.now() + challengeTtlMs);
 
+          if (!ctx.context.internalAdapter?.createVerificationValue) {
+            throw new APIError("INTERNAL_SERVER_ERROR", {
+              message:
+                "Internal adapter not initialized. Ensure database migrations have been run and the verification table exists. Run: npx @better-auth/cli@latest migrate",
+            });
+          }
+
           await ctx.context.internalAdapter.createVerificationValue({
             identifier: `${CHALLENGE_PREFIX}${payload}`,
             value: payload,
@@ -224,6 +231,13 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
         },
         async (ctx) => {
           const body = ctx.body;
+
+          if (!ctx.context.internalAdapter?.consumeVerificationValue) {
+            throw new APIError("INTERNAL_SERVER_ERROR", {
+              message:
+                "Internal adapter not initialized. Ensure database migrations have been run and the verification table exists. Run: npx @better-auth/cli@latest migrate",
+            });
+          }
 
           // Atomically consume the challenge — single use, race-safe.
           const identifier = `${CHALLENGE_PREFIX}${body.proof.payload}`;
@@ -366,6 +380,13 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
         async (ctx) => {
           const body = ctx.body;
           const user = ctx.context.session.user;
+
+          if (!ctx.context.internalAdapter?.consumeVerificationValue) {
+            throw new APIError("INTERNAL_SERVER_ERROR", {
+              message:
+                "Internal adapter not initialized. Ensure database migrations have been run and the verification table exists. Run: npx @better-auth/cli@latest migrate",
+            });
+          }
 
           const identifier = `${CHALLENGE_PREFIX}${body.proof.payload}`;
           const verification =
