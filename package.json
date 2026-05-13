@@ -30,7 +30,8 @@
     "lint": "eslint .",
     "test": "vitest --run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run typecheck && npm run lint && npm run test && npm run build"
+    "release": "npm run build && changeset publish",
+    "version": "changeset version"
   },
   "keywords": [
     "better-auth",
@@ -67,6 +68,8 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@changesets/changelog-github": "^0.7.0",
+    "@changesets/cli": "^2.31.0",
     "@eslint/js": "^10.0.1",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.0",
