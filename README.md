@@ -1,5 +1,8 @@
 # ton-better-auth
 
+<img width="200" height="200" alt="image" src="https://github.com/user-attachments/assets/40ad78aa-5621-4afd-8277-145fc843930a" />
+
+
 Sign in with TON Connect for [Better Auth](https://better-auth.com). Ships
 a server plugin that verifies `ton_proof` payloads end-to-end (replayable
 nonce challenge, signature verification, wallet state-init parsing for v1
