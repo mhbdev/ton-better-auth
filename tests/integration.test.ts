@@ -159,7 +159,7 @@ describe("ton-better-auth wallet management", () => {
   it("marks the first linked wallet as primary when wallet rows were missing", async () => {
     const { response, headers } = await signInFresh(auth);
 
-    const db = auth.options.database as Database.Database;
+    const db = auth.options.database;
     db.prepare("DELETE FROM tonWallet WHERE userId = ?").run(response.user.id);
 
     const linked = await linkFresh(auth, headers);
@@ -176,7 +176,7 @@ describe("ton-better-auth wallet management", () => {
     const third = await linkFresh(auth, headers);
     const second = await linkFresh(auth, headers);
 
-    const db = auth.options.database as Database.Database;
+    const db = auth.options.database;
     db.prepare("UPDATE tonWallet SET isPrimary = 1 WHERE address = ?").run(
       second.request.address,
     );
