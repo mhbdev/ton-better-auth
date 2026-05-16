@@ -25,6 +25,7 @@
 import { APIError, createAuthEndpoint, sessionMiddleware } from "better-auth/api";
 import { setSessionCookie } from "better-auth/cookies";
 import { mergeSchema } from "better-auth/db";
+import type { Where } from "@better-auth/core/db/adapter";
 import type { BetterAuthPlugin, User } from "better-auth";
 import { getSecureRandomBytes } from "@ton/crypto";
 import { Address } from "@ton/ton";
@@ -123,6 +124,63 @@ interface TonWalletRow {
   network: TonChain;
   isPrimary: boolean;
   createdAt: Date;
+}
+
+interface TonWalletPrimaryAdapter {
+  findMany: <T>(data: {
+    model: string;
+    where?: Where[];
+  }) => Promise<T[]>;
+  updateMany: (data: {
+    model: string;
+    where: Where[];
+    update: Record<string, unknown>;
+  }) => Promise<number>;
+  update: <T>(data: {
+    model: string;
+    where: Where[];
+    update: Record<string, unknown>;
+  }) => Promise<T | null>;
+}
+
+function compareWalletRows(a: TonWalletRow, b: TonWalletRow): number {
+  const timeA = a.createdAt.getTime();
+  const timeB = b.createdAt.getTime();
+  if (timeA !== timeB) return timeA - timeB;
+  return a.id.localeCompare(b.id);
+}
+
+async function normalizePrimaryWalletForUser(
+  adapter: TonWalletPrimaryAdapter,
+  userId: string,
+): Promise<void> {
+  const wallets = await adapter.findMany<TonWalletRow>({
+    model: "tonWallet",
+    where: [{ field: "userId", operator: "eq", value: userId }],
+  });
+
+  if (wallets.length === 0) return;
+
+  const ordered = [...wallets].sort(compareWalletRows);
+  const preferred = ordered.find((w) => w.isPrimary) ?? ordered[0];
+  if (!preferred) return;
+  const primaryCount = ordered.filter((w) => w.isPrimary).length;
+  if (primaryCount === 1 && preferred.isPrimary) return;
+
+  await adapter.updateMany({
+    model: "tonWallet",
+    where: [
+      { field: "userId", operator: "eq", value: userId },
+      { field: "id", operator: "ne", value: preferred.id },
+    ],
+    update: { isPrimary: false },
+  });
+
+  await adapter.update({
+    model: "tonWallet",
+    where: [{ field: "id", operator: "eq", value: preferred.id }],
+    update: { isPrimary: true },
+  });
 }
 
 /** Convert any TON address representation to the canonical `wc:hex` raw form. */
@@ -336,6 +394,10 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
             });
           }
 
+          await ctx.context.adapter.transaction(async (trx) => {
+            await normalizePrimaryWalletForUser(trx, user.id);
+          });
+
           const session = await ctx.context.internalAdapter.createSession(
             user.id,
             false,
@@ -431,16 +493,20 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
             });
           }
 
-          await ctx.context.adapter.create<Omit<TonWalletRow, "id">>({
-            model: "tonWallet",
-            data: {
-              userId: user.id,
-              address: rawAddress,
-              publicKey: body.public_key.toLowerCase(),
-              network: body.network,
-              isPrimary: false,
-              createdAt: new Date(),
-            },
+          await ctx.context.adapter.transaction(async (trx) => {
+            await trx.create<Omit<TonWalletRow, "id">>({
+              model: "tonWallet",
+              data: {
+                userId: user.id,
+                address: rawAddress,
+                publicKey: body.public_key.toLowerCase(),
+                network: body.network,
+                isPrimary: false,
+                createdAt: new Date(),
+              },
+            });
+
+            await normalizePrimaryWalletForUser(trx, user.id);
           });
 
           await ctx.context.internalAdapter.createAccount({
@@ -479,49 +545,41 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
           const user = ctx.context.session.user;
           const rawAddress = toRawAddress(ctx.body.address);
 
-          const target = await ctx.context.adapter.findOne<TonWalletRow>({
-            model: "tonWallet",
-            where: [
-              { field: "address", operator: "eq", value: rawAddress },
-              { field: "userId", operator: "eq", value: user.id },
-            ],
-          });
-          if (!target) {
-            throw new APIError("NOT_FOUND", {
-              message: "Wallet is not linked to this account.",
+          await ctx.context.adapter.transaction(async (trx) => {
+            const target = await trx.findOne<TonWalletRow>({
+              model: "tonWallet",
+              where: [
+                { field: "address", operator: "eq", value: rawAddress },
+                { field: "userId", operator: "eq", value: user.id },
+              ],
             });
-          }
-
-          const others = await ctx.context.adapter.findMany<TonWalletRow>({
-            model: "tonWallet",
-            where: [{ field: "userId", operator: "eq", value: user.id }],
-          });
-
-          if (others.length <= 1) {
-            // Refuse to remove the last wallet — otherwise the user
-            // could lock themselves out if they have no other auth method.
-            throw new APIError("BAD_REQUEST", {
-              message:
-                "Cannot unlink the last remaining wallet for this account.",
-            });
-          }
-
-          await ctx.context.adapter.delete({
-            model: "tonWallet",
-            where: [{ field: "id", operator: "eq", value: target.id }],
-          });
-
-          // If we removed the primary wallet, promote another one.
-          if (target.isPrimary) {
-            const next = others.find((w) => w.id !== target.id);
-            if (next) {
-              await ctx.context.adapter.update({
-                model: "tonWallet",
-                where: [{ field: "id", operator: "eq", value: next.id }],
-                update: { isPrimary: true },
+            if (!target) {
+              throw new APIError("NOT_FOUND", {
+                message: "Wallet is not linked to this account.",
               });
             }
-          }
+
+            const others = await trx.findMany<TonWalletRow>({
+              model: "tonWallet",
+              where: [{ field: "userId", operator: "eq", value: user.id }],
+            });
+
+            if (others.length <= 1) {
+              // Refuse to remove the last wallet — otherwise the user
+              // could lock themselves out if they have no other auth method.
+              throw new APIError("BAD_REQUEST", {
+                message:
+                  "Cannot unlink the last remaining wallet for this account.",
+              });
+            }
+
+            await trx.delete({
+              model: "tonWallet",
+              where: [{ field: "id", operator: "eq", value: target.id }],
+            });
+
+            await normalizePrimaryWalletForUser(trx, user.id);
+          });
 
           return ctx.json({ success: true as const });
         },

@@ -52,6 +52,24 @@ async function signInFresh(auth: Auth) {
   return { request, response: response.response, headers };
 }
 
+async function linkFresh(auth: Auth, headers: Headers) {
+  const challenge = await auth.api.getTonConnectChallenge({});
+  const { request } = await buildSignedProof({
+    domain: DOMAIN,
+    payload: challenge.payload,
+  });
+  const response = await auth.api.linkTonConnect({
+    body: request,
+    headers,
+  });
+  return { request, response };
+}
+
+async function countPrimaryWallets(auth: Auth, headers: Headers) {
+  const wallets = await auth.api.listTonWallets({ headers });
+  return wallets.wallets.filter((w) => w.isPrimary).length;
+}
+
 describe("ton-better-auth integration", () => {
   let auth: Auth;
 
@@ -136,5 +154,44 @@ describe("ton-better-auth wallet management", () => {
         headers,
       }),
     ).rejects.toThrow(APIError);
+  });
+
+  it("marks the first linked wallet as primary when wallet rows were missing", async () => {
+    const { response, headers } = await signInFresh(auth);
+
+    const db = auth.options.database as Database.Database;
+    db.prepare("DELETE FROM tonWallet WHERE userId = ?").run(response.user.id);
+
+    const linked = await linkFresh(auth, headers);
+    const wallets = await auth.api.listTonWallets({ headers });
+
+    expect(wallets.wallets).toHaveLength(1);
+    expect(wallets.wallets[0]?.address).toBe(linked.request.address);
+    expect(wallets.wallets[0]?.isPrimary).toBe(true);
+  });
+
+  it("heals duplicate primary wallets while unlinking", async () => {
+    const { request: first, headers } = await signInFresh(auth);
+
+    const third = await linkFresh(auth, headers);
+    const second = await linkFresh(auth, headers);
+
+    const db = auth.options.database as Database.Database;
+    db.prepare("UPDATE tonWallet SET isPrimary = 1 WHERE address = ?").run(
+      second.request.address,
+    );
+
+    expect(await countPrimaryWallets(auth, headers)).toBe(2);
+
+    await auth.api.unlinkTonConnect({
+      body: { address: first.address },
+      headers,
+    });
+
+    const wallets = await auth.api.listTonWallets({ headers });
+    const primaryWallets = wallets.wallets.filter((w) => w.isPrimary);
+
+    expect(third.response.success).toBe(true);
+    expect(primaryWallets).toHaveLength(1);
   });
 });
