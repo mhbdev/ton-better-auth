@@ -8,7 +8,7 @@ license: MIT
 compatibility: Requires better-auth (>=1.3.0) and @better-auth/core
 metadata:
   author: mhbdev
-  version: "0.1.1"
+  version: "0.1.2"
   repository: https://github.com/mhbdev/ton-better-auth
 ---
 
@@ -35,6 +35,7 @@ npm install ton-better-auth
 ```
 
 Peer dependencies: `better-auth` (>= 1.3) and `@better-auth/core`.
+Optional peer dependency for React helper: `react` (>= 18).
 
 ## Quick Start
 
@@ -81,8 +82,15 @@ export const authClient = createAuthClient({
 
 ```typescript
 tonConnect({
-  // Required: domains the wallet is allowed to sign
-  allowedDomains: ["your-app.com", "localhost:3000"],
+  // Required: domain policy (supports wildcard and per-network entries)
+  allowedDomains: {
+    default: ["your-app.com", "*.your-app.com"],
+    testnet: ["localhost:3000"],
+  },
+  // Optional additive per-network policy
+  allowedDomainsByNetwork: {
+    "-3": ["*.dev.your-app.com"],
+  },
   
   // Optional: signature TTL (default: 15 minutes)
   validAuthTimeSec: 15 * 60,
@@ -107,6 +115,34 @@ tonConnect({
   
   // Optional: disable email synthesis
   createUserEmail: false,
+
+  // Optional: anti-abuse controls
+  antiAbuse: {
+    challenge: { windowSec: 60, maxPerIp: 20, maxPerAddress: 0 },
+    verify: { windowSec: 60, maxPerIp: 20, maxPerAddress: 8 },
+    failedVerifyCooldown: {
+      enabled: true,
+      threshold: 5,
+      windowSec: 10 * 60,
+      cooldownSec: 10 * 60,
+      keying: "ip+address",
+    },
+  },
+
+  // Optional: multi-wallet sign-in behavior
+  authRules: {
+    onlyPrimaryCanSignIn: false,
+    allowOnlyLinkedWallets: false,
+    autoLinkOnVerify: true,
+  },
+
+  // Optional: lifecycle hooks
+  events: {
+    onChallengeIssued: async (event) => {},
+    onVerifySuccess: async (event) => {},
+    onVerifyFail: async (event) => {},
+    onWalletLinked: async (event) => {},
+  },
 });
 ```
 
@@ -118,6 +154,8 @@ tonConnect({
 | POST | `/ton-connect/verify` | no | Verify a `ton_proof` and start a session |
 | POST | `/ton-connect/link` | yes | Link an extra TON wallet to the user |
 | POST | `/ton-connect/unlink` | yes | Remove a linked wallet |
+| POST | `/ton-connect/set-primary` | yes | Explicitly set a linked wallet as primary |
+| POST | `/ton-connect/switch-session-wallet` | yes | Switch active wallet context for the current session |
 | GET | `/ton-connect/wallets` | yes | List the current user's linked wallets |
 
 ## Client API Methods
@@ -148,91 +186,67 @@ const { error } = await authClient.tonConnect.unlink({ address: "0:abc..." });
 
 // List linked wallets (requires authentication)
 const { data, error } = await authClient.tonConnect.wallets();
+
+// Set a linked wallet as primary (requires authentication)
+const { error: setPrimaryError } = await authClient.tonConnect.setPrimary({
+  address: "0:abc...",
+});
+
+// Rotate active wallet context for current session (requires authentication)
+const { error: switchSessionError } =
+  await authClient.tonConnect.switchSessionWallet({
+    address: "0:def...",
+  });
 ```
 
 ## React Integration with @tonconnect/ui-react
 
 ```tsx
 import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useTonConnectAuth } from "ton-better-auth/react";
 import { authClient } from "./auth-client";
-
-const REFRESH_INTERVAL_MS = 9 * 60 * 1000; // Refresh every 9 min
 
 export function SignInButton() {
   const [tonConnectUI] = useTonConnectUI();
   const wallet = useTonWallet();
-  const [authed, setAuthed] = useState(false);
-  const firstLoad = useRef(true);
-
-  // Keep the wallet supplied with a fresh challenge payload
-  const refreshChallenge = useCallback(async () => {
-    if (firstLoad.current) {
-      tonConnectUI.setConnectRequestParameters({ state: "loading" });
-      firstLoad.current = false;
-    }
-
-    const { data, error } = await authClient.tonConnect.challenge();
-
-    if (error || !data?.payload) {
-      tonConnectUI.setConnectRequestParameters(null);
-      return;
-    }
-
-    tonConnectUI.setConnectRequestParameters({
-      state: "ready",
-      value: { tonProof: data.payload },
+  const { authenticated, status, error, disconnect, refreshChallenge } =
+    useTonConnectAuth({
+      tonConnectUI,
+      authClient,
+      refreshIntervalMs: 9 * 60 * 1000,
+      // Optional when server captcha checks are enabled
+      getCaptchaToken: async ({ phase }) =>
+        phase === "challenge" ? localStorage.getItem("captcha-token") : null,
+      onError: (e) => console.error(e.code, e.message),
     });
-  }, [tonConnectUI]);
 
-  useEffect(() => {
-    void refreshChallenge();
-    const id = setInterval(() => void refreshChallenge(), REFRESH_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [refreshChallenge]);
-
-  // Verify the ton_proof when the wallet connects
-  useEffect(() => {
-    return tonConnectUI.onStatusChange(async (w) => {
-      if (!w) {
-        setAuthed(false);
-        return;
-      }
-      const item = w.connectItems?.tonProof;
-      if (!item || !("proof" in item)) return;
-
-      const { error } = await authClient.tonConnect.verify({
-        address: w.account.address,
-        network: w.account.chain,
-        public_key: w.account.publicKey!,
-        proof: {
-          timestamp: item.proof.timestamp,
-          domain: item.proof.domain,
-          payload: item.proof.payload,
-          signature: item.proof.signature,
-          state_init: w.account.walletStateInit,
-        },
-      });
-
-      if (error) {
-        await tonConnectUI.disconnect();
-        setAuthed(false);
-        return;
-      }
-      setAuthed(true);
-    });
-  }, [tonConnectUI]);
-
-  if (authed) {
+  if (authenticated) {
     return (
-      <button onClick={() => tonConnectUI.disconnect()}>
+      <button onClick={() => void disconnect()}>
         Disconnect {wallet?.account.address.slice(0, 6)}...
       </button>
     );
   }
-  return <button onClick={() => tonConnectUI.openModal()}>Sign in</button>;
+
+  return (
+    <button
+      onClick={() => {
+        void refreshChallenge();
+        void tonConnectUI.openModal();
+      }}
+      disabled={status === "loading-challenge" || status === "verifying"}
+      title={error?.message}
+    >
+      Sign in
+    </button>
+  );
 }
 ```
+
+`useTonConnectAuth` provides typed status and error lifecycle:
+- `status`: `idle | loading-challenge | ready | verifying | authenticated | error`
+- `error.code`: stable typed error codes (challenge/verify/wallet payload cases)
+- helpers: `refreshChallenge()`, `disconnect()`, and optional captcha integration
 
 ## Standalone Verification
 
@@ -275,8 +289,8 @@ See the `ton-better-auth-runtime` skill for detailed runtime configuration.
 
 - Challenges are stored in the Better Auth `verification` table and consumed atomically
 - Signatures older than `validAuthTimeSec` are rejected (default: 15 minutes)
-- Signed app domain must match `allowedDomains` exactly (case-sensitive, include port)
-- `challenge` and `verify` endpoints are rate-limited to 20 requests per 60 seconds
+- Signed domain policy supports wildcard patterns and per-network rules
+- Anti-abuse supports per-IP/per-address limits, failed-verify cooldown, and optional captcha hooks
 - The verifier follows the reference implementation from TON Connect demo dApp
 
 ## Common Issues

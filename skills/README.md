@@ -17,7 +17,7 @@ npx skills add mhbdev/ton-better-auth
 Integrate TON Connect wallet authentication into Better Auth projects. Covers:
 - Server plugin setup with `tonConnect()`
 - Client plugin configuration with `tonConnectClient()`
-- React integration with `@tonconnect/ui-react`
+- React integration with `@tonconnect/ui-react` and `useTonConnectAuth`
 - API endpoints and client methods
 - Standalone `verifyTonProof()` usage
 
