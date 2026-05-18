@@ -24,6 +24,19 @@ import {
   WalletContractV5R1,
 } from "@ton/ton";
 
+export type TonWalletVersion =
+  | "v1r1"
+  | "v1r2"
+  | "v1r3"
+  | "v2r1"
+  | "v2r2"
+  | "v3r1"
+  | "v3r2"
+  | "v4r1"
+  | "v4r2"
+  | "v5beta"
+  | "v5r1";
+
 /**
  * The v4R1 wallet contract code isn't exported by `@ton/ton` (only v4R2 is),
  * so we build a thin wrapper that reuses the v4R2 data layout but swaps in
@@ -103,22 +116,28 @@ function loadWalletV5Data(cs: Slice) {
 
 type LoadData = (cs: Slice) => { publicKey: Buffer };
 
-const knownWallets: Array<{
-  wallet: { init: { code: Cell } };
+type KnownWalletDef = {
+  version: TonWalletVersion;
+  contract: { create: (args: { workchain: number; publicKey: Buffer }) => { init: { code: Cell } } };
   loadData: LoadData;
-}> = [
-  { contract: WalletContractV1R1, loadData: loadWalletV1Data },
-  { contract: WalletContractV1R2, loadData: loadWalletV1Data },
-  { contract: WalletContractV1R3, loadData: loadWalletV1Data },
-  { contract: WalletContractV2R1, loadData: loadWalletV2Data },
-  { contract: WalletContractV2R2, loadData: loadWalletV2Data },
-  { contract: WalletContractV3R1, loadData: loadWalletV3Data },
-  { contract: WalletContractV3R2, loadData: loadWalletV3Data },
-  { contract: WalletContractV4R1, loadData: loadWalletV4Data },
-  { contract: WalletContractV4R2, loadData: loadWalletV4Data },
-  { contract: WalletContractV5Beta, loadData: loadWalletV5BetaData },
-  { contract: WalletContractV5R1, loadData: loadWalletV5Data },
-].map(({ contract, loadData }) => ({
+};
+
+const knownWallets = (
+  [
+    { version: "v1r1", contract: WalletContractV1R1, loadData: loadWalletV1Data },
+    { version: "v1r2", contract: WalletContractV1R2, loadData: loadWalletV1Data },
+    { version: "v1r3", contract: WalletContractV1R3, loadData: loadWalletV1Data },
+    { version: "v2r1", contract: WalletContractV2R1, loadData: loadWalletV2Data },
+    { version: "v2r2", contract: WalletContractV2R2, loadData: loadWalletV2Data },
+    { version: "v3r1", contract: WalletContractV3R1, loadData: loadWalletV3Data },
+    { version: "v3r2", contract: WalletContractV3R2, loadData: loadWalletV3Data },
+    { version: "v4r1", contract: WalletContractV4R1, loadData: loadWalletV4Data },
+    { version: "v4r2", contract: WalletContractV4R2, loadData: loadWalletV4Data },
+    { version: "v5beta", contract: WalletContractV5Beta, loadData: loadWalletV5BetaData },
+    { version: "v5r1",  contract: WalletContractV5R1,  loadData: loadWalletV5Data },
+  ] satisfies KnownWalletDef[]
+).map(({ version, contract, loadData }) => ({
+  version,
   loadData,
   wallet: contract.create({ workchain: 0, publicKey: Buffer.alloc(32) }),
 }));
@@ -130,12 +149,17 @@ const knownWallets: Array<{
  * Returns `null` when the contract code isn't recognised — callers should
  * fall back to an on-chain `get_public_key` lookup in that case.
  */
-export function tryParsePublicKey(stateInit: StateInit): Buffer | null {
-  if (!stateInit.code || !stateInit.data) {
-    return null;
-  }
+export function tryParsePublicKey(
+  stateInit: StateInit,
+  allowedVersions?: TonWalletVersion[],
+): Buffer | null {
+  if (!stateInit.code || !stateInit.data) return null;
 
-  for (const { wallet, loadData } of knownWallets) {
+  const candidates = allowedVersions
+    ? knownWallets.filter((w) => allowedVersions.includes(w.version))
+    : knownWallets;
+
+  for (const { wallet, loadData } of candidates) {
     try {
       if (wallet.init.code.equals(stateInit.code)) {
         return loadData(stateInit.data.beginParse()).publicKey;

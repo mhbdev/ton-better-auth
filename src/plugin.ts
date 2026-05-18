@@ -22,7 +22,11 @@
  * table under the identifier `ton-proof-challenge:<nonce>` and are single
  * use. They must be presented back as `proof.payload` when verifying.
  */
-import { APIError, createAuthEndpoint, sessionMiddleware } from "better-auth/api";
+import {
+  APIError,
+  createAuthEndpoint,
+  sessionMiddleware,
+} from "better-auth/api";
 import { setSessionCookie } from "better-auth/cookies";
 import { mergeSchema } from "better-auth/db";
 import type { Where } from "@better-auth/core/db/adapter";
@@ -38,6 +42,7 @@ import type {
   TonChain,
 } from "./types.js";
 import { verifyTonProof } from "./verify.js";
+import type { TonWalletVersion } from "./wallets.js";
 
 const CHALLENGE_PREFIX = "ton-proof-challenge:";
 
@@ -72,6 +77,10 @@ export interface TonConnectPluginOptions {
    * signed domain must match one of these entries.
    */
   allowedDomains: string[];
+  /**
+   * Allowed wallet versions
+   */
+  allowedWalletVersions?: TonWalletVersion[];
   /**
    * Email domain used to synthesise placeholder emails for new users.
    * Defaults to `"ton.local"`. Emails look like `<address>@<domain>`.
@@ -127,10 +136,7 @@ interface TonWalletRow {
 }
 
 interface TonWalletPrimaryAdapter {
-  findMany: <T>(data: {
-    model: string;
-    where?: Where[];
-  }) => Promise<T[]>;
+  findMany: <T>(data: { model: string; where?: Where[] }) => Promise<T[]>;
   updateMany: (data: {
     model: string;
     where: Where[];
@@ -207,8 +213,7 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
     rateLimit: [
       {
         pathMatcher: (path) =>
-          path === "/ton-connect/challenge" ||
-          path === "/ton-connect/verify",
+          path === "/ton-connect/challenge" || path === "/ton-connect/verify",
         window: 60,
         max: 20,
       },
@@ -226,8 +231,7 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
           body: z.object({}).optional(),
           metadata: {
             openapi: {
-              description:
-                "Generate a single-use ton_proof challenge payload.",
+              description: "Generate a single-use ton_proof challenge payload.",
               responses: {
                 "200": {
                   description: "New challenge payload",
@@ -314,6 +318,7 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
             allowedDomains: options.allowedDomains,
             validAuthTimeSec: options.validAuthTimeSec,
             getWalletPublicKey: options.getWalletPublicKey,
+            allowedWalletVersions: options.allowedWalletVersions,
           });
           if (!result.ok) {
             throw new APIError("UNAUTHORIZED", {
@@ -326,9 +331,7 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
           // Look for an existing wallet link.
           const existing = await ctx.context.adapter.findOne<TonWalletRow>({
             model: "tonWallet",
-            where: [
-              { field: "address", operator: "eq", value: rawAddress },
-            ],
+            where: [{ field: "address", operator: "eq", value: rawAddress }],
           });
 
           let user: User | null = null;
@@ -336,9 +339,7 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
           if (existing) {
             user = await ctx.context.adapter.findOne<User>({
               model: "user",
-              where: [
-                { field: "id", operator: "eq", value: existing.userId },
-              ],
+              where: [{ field: "id", operator: "eq", value: existing.userId }],
             });
           }
 
@@ -434,8 +435,7 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
           use: [sessionMiddleware],
           metadata: {
             openapi: {
-              description:
-                "Link an additional TON wallet to the current user.",
+              description: "Link an additional TON wallet to the current user.",
             },
           },
         },
@@ -465,6 +465,7 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
             allowedDomains: options.allowedDomains,
             validAuthTimeSec: options.validAuthTimeSec,
             getWalletPublicKey: options.getWalletPublicKey,
+            allowedWalletVersions: options.allowedWalletVersions,
           });
           if (!result.ok) {
             throw new APIError("UNAUTHORIZED", {
@@ -475,9 +476,7 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
           const rawAddress = toRawAddress(body.address);
           const existing = await ctx.context.adapter.findOne<TonWalletRow>({
             model: "tonWallet",
-            where: [
-              { field: "address", operator: "eq", value: rawAddress },
-            ],
+            where: [{ field: "address", operator: "eq", value: rawAddress }],
           });
 
           if (existing) {

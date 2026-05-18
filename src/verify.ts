@@ -21,7 +21,7 @@ import { Address, Cell, contractAddress, loadStateInit } from "@ton/ton";
 import { sign } from "tweetnacl";
 
 import type { GetWalletPublicKey, TonProofRequest } from "./types.js";
-import { tryParsePublicKey } from "./wallets.js";
+import { type TonWalletVersion, tryParsePublicKey } from "./wallets.js";
 
 const TON_PROOF_PREFIX = "ton-proof-item-v2/";
 const TON_CONNECT_PREFIX = "ton-connect";
@@ -33,6 +33,8 @@ export interface VerifyTonProofOptions {
   validAuthTimeSec?: number;
   /** Optional on-chain public key fetcher used when state-init parsing fails. */
   getWalletPublicKey?: GetWalletPublicKey;
+  /** Only let allowed wallet versions to be verified */
+  allowedWalletVersions?: TonWalletVersion[];
 }
 
 export interface VerifyTonProofResult {
@@ -60,7 +62,7 @@ export async function verifyTonProof(
       Cell.fromBase64(request.proof.state_init).beginParse(),
     );
 
-    let publicKey = tryParsePublicKey(stateInit);
+    let publicKey = tryParsePublicKey(stateInit, options.allowedWalletVersions);
     if (!publicKey && options.getWalletPublicKey) {
       publicKey = await options.getWalletPublicKey(
         request.address,
