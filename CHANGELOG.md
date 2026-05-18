@@ -1,5 +1,11 @@
 # ton-better-auth
 
+## 0.1.3
+
+### Patch Changes
+
+- [`60cedd1`](https://github.com/mhbdev/ton-better-auth/commit/60cedd18bc8677fc9a44c1053ec2285c57ae98c8) Thanks [@mhbdev](https://github.com/mhbdev)! - Support for allowed wallet versions for wallet connection verification
+
 ## 0.1.2
 
 ### Patch Changes
