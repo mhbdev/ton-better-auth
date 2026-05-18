@@ -12,8 +12,14 @@ export { verifyTonProof } from "./verify.js";
 export { tryParsePublicKey } from "./wallets.js";
 export type {
   GetWalletPublicKey,
+  TonAntiAbuseOptions,
   TonAddressLookup,
+  TonCaptchaHookContext,
+  TonCaptchaOptions,
   TonChain,
+  TonDomainPolicy,
+  TonMultiWalletAuthRules,
+  TonPluginEventHooks,
   TonProofPayload,
   TonProofRequest,
   TonSignInResult,

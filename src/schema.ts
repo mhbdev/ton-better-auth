@@ -8,6 +8,20 @@
 import type { BetterAuthPluginDBSchema } from "@better-auth/core/db";
 
 export const schema = {
+  session: {
+    fields: {
+      /** Active TON wallet context for wallet-scoped dApps. */
+      activeTonWalletAddress: {
+        type: "string",
+        required: false,
+      },
+      /** Network of the active TON wallet (`-239` mainnet, `-3` testnet). */
+      activeTonWalletNetwork: {
+        type: "string",
+        required: false,
+      },
+    },
+  },
   tonWallet: {
     fields: {
       userId: {

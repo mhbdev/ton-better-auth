@@ -20,15 +20,22 @@ import { sha256 } from "@ton/crypto";
 import { Address, Cell, contractAddress, loadStateInit } from "@ton/ton";
 import { sign } from "tweetnacl";
 
-import type { GetWalletPublicKey, TonProofRequest } from "./types.js";
+import type {
+  GetWalletPublicKey,
+  TonChain,
+  TonDomainPolicy,
+  TonProofRequest,
+} from "./types.js";
 import { type TonWalletVersion, tryParsePublicKey } from "./wallets.js";
 
 const TON_PROOF_PREFIX = "ton-proof-item-v2/";
 const TON_CONNECT_PREFIX = "ton-connect";
 
 export interface VerifyTonProofOptions {
-  /** List of domains the app will accept a signature for. */
-  allowedDomains: string[];
+  /** Domain policy the app will accept signatures for. */
+  allowedDomains: TonDomainPolicy;
+  /** Optional per-network additive policy. */
+  allowedDomainsByNetwork?: Partial<Record<TonChain, string[]>>;
   /** Max age of the signature in seconds. Defaults to 15 minutes. */
   validAuthTimeSec?: number;
   /** Optional on-chain public key fetcher used when state-init parsing fails. */
@@ -41,6 +48,42 @@ export interface VerifyTonProofResult {
   ok: boolean;
   /** Human-readable reason when `ok === false`. */
   reason?: string;
+}
+
+function normalizeDomain(input: string): string {
+  return input.trim().toLowerCase();
+}
+
+function escapeRegExp(input: string): string {
+  return input.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+}
+
+function domainPatternToRegExp(pattern: string): RegExp {
+  const escaped = escapeRegExp(pattern);
+  const regexBody = escaped.replace(/\*/g, ".*");
+  return new RegExp(`^${regexBody}$`);
+}
+
+function matchDomain(value: string, pattern: string): boolean {
+  if (!pattern.includes("*")) return value === pattern;
+  return domainPatternToRegExp(pattern).test(value);
+}
+
+function resolveAllowedDomains(
+  policy: TonDomainPolicy,
+  network: TonChain,
+  byNetwork?: Partial<Record<TonChain, string[]>>,
+): string[] {
+  const fromPolicy: string[] = Array.isArray(policy)
+    ? policy
+    : [
+        ...(policy.default ?? []),
+        ...(policy[network] ?? []),
+        ...(network === "-239" ? (policy.mainnet ?? []) : (policy.testnet ?? [])),
+      ];
+
+  const networkAugment = byNetwork?.[network] ?? [];
+  return [...fromPolicy, ...networkAugment].map(normalizeDomain);
 }
 
 /**
@@ -89,8 +132,17 @@ export async function verifyTonProof(
       return { ok: false, reason: "address_mismatch" };
     }
 
-    // Domain must be on the allow-list (exact match, case-sensitive).
-    if (!options.allowedDomains.includes(request.proof.domain.value)) {
+    // Domain must match the effective policy for this network.
+    const allowedDomains = resolveAllowedDomains(
+      options.allowedDomains,
+      request.network,
+      options.allowedDomainsByNetwork,
+    );
+    const requestDomain = normalizeDomain(request.proof.domain.value);
+    const domainOk = allowedDomains.some((pattern) =>
+      matchDomain(requestDomain, pattern),
+    );
+    if (!domainOk) {
       return { ok: false, reason: "domain_not_allowed" };
     }
 

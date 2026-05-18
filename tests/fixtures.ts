@@ -32,13 +32,14 @@ export interface BuildProofOptions {
   workchain?: number;
 }
 
-/**
- * Create a valid v4 wallet + matching signed ton_proof for tests.
- */
-export async function buildSignedProof(
-  options: BuildProofOptions,
+export interface BuildProofFromKeyPairOptions extends BuildProofOptions {
+  keyPair: nacl.SignKeyPair;
+}
+
+async function buildSignedProofFromKeyPair(
+  options: BuildProofFromKeyPairOptions,
 ): Promise<SignedProof> {
-  const keyPair = nacl.sign.keyPair();
+  const keyPair = options.keyPair;
   const publicKey = Buffer.from(keyPair.publicKey);
   const workchain = options.workchain ?? 0;
   const network: TonChain = options.network ?? "-239";
@@ -46,7 +47,6 @@ export async function buildSignedProof(
   const wallet = WalletContractV4.create({ workchain, publicKey });
   const address = contractAddress(workchain, wallet.init);
 
-  // Encode the state init as a base64 BoC cell.
   const stateInitCell = beginCell()
     .store(storeStateInit(wallet.init))
     .endCell();
@@ -102,6 +102,25 @@ export async function buildSignedProof(
   };
 
   return { keyPair, request };
+}
+
+/**
+ * Create a valid v4 wallet + matching signed ton_proof for tests.
+ */
+export async function buildSignedProof(
+  options: BuildProofOptions,
+): Promise<SignedProof> {
+  const keyPair = nacl.sign.keyPair();
+  return buildSignedProofFromKeyPair({
+    ...options,
+    keyPair,
+  });
+}
+
+export async function buildSignedProofWithExistingKeyPair(
+  options: BuildProofFromKeyPairOptions,
+): Promise<SignedProof> {
+  return buildSignedProofFromKeyPair(options);
 }
 
 export function corruptSignature(request: TonProofRequest): TonProofRequest {

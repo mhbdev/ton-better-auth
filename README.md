@@ -27,7 +27,8 @@ cookie after a successful TON wallet sign-in.
 npm install ton-better-auth
 ```
 
-Peer dependencies: `better-auth` (>= 1.3) and its `@better-auth/core`.
+Peer dependencies: `better-auth` (>= 1.3) and `@better-auth/core`.
+Optional peer for `ton-better-auth/react`: `react` (>= 18).
 
 ## Server setup
 
@@ -40,13 +41,41 @@ export const auth = betterAuth({
   database: /* your adapter */,
   plugins: [
     tonConnect({
-      // Exactly the host the wallet signs. No protocol.
-      // Include the port if your dev UI runs on one.
-      allowedDomains: ["example.com", "localhost:5173"],
+      // Domain policy can be global string[] or per-network object.
+      // Supports wildcard patterns (e.g. *.example.com).
+      allowedDomains: {
+        default: ["example.com", "*.example.com"],
+        mainnet: ["app.example.com"],
+        testnet: ["localhost:5173", "*.staging.example.com"],
+      },
+      // Optional additive policy by network id.
+      allowedDomainsByNetwork: {
+        "-3": ["*.dev.example.com"],
+      },
       // Optional tweaks:
       validAuthTimeSec: 15 * 60,  // signature TTL, defaults to 15 min
       challengeTtlSec: 10 * 60,   // nonce TTL, defaults to 10 min
       emailDomain: "ton.local",   // used to synth an email for new users
+      antiAbuse: {
+        verify: { maxPerIp: 20, maxPerAddress: 8, windowSec: 60 },
+        failedVerifyCooldown: {
+          enabled: true,
+          threshold: 5,
+          windowSec: 10 * 60,
+          cooldownSec: 10 * 60,
+          keying: "ip+address",
+        },
+      },
+      authRules: {
+        onlyPrimaryCanSignIn: false,
+        allowOnlyLinkedWallets: false,
+        autoLinkOnVerify: true,
+      },
+      events: {
+        onVerifySuccess: async (event) => {
+          console.log("TON verify success", event.userId, event.address);
+        },
+      },
       // Optional: fallback when state-init parsing fails (rare).
       // Called as getWalletPublicKey(address, network).
       getWalletPublicKey: async (address) => {
@@ -86,118 +115,80 @@ The plugin exposes these endpoints under `/ton-connect`:
 
 | Method | Path                      | Auth | Purpose                                    |
 |--------|---------------------------|------|--------------------------------------------|
-| POST   | `/ton-connect/challenge`  | no   | Issue a one-shot `ton_proof` payload       |
+| POST   | `/ton-connect/challenge`  | no   | Issue a one-shot `ton_proof` payload (`body.address` optional) |
 | POST   | `/ton-connect/verify`     | no   | Verify a `ton_proof` and start a session   |
 | POST   | `/ton-connect/link`       | yes  | Link an extra TON wallet to the user       |
 | POST   | `/ton-connect/unlink`     | yes  | Remove a linked wallet                     |
+| POST   | `/ton-connect/set-primary`| yes  | Set a linked wallet as primary             |
+| POST   | `/ton-connect/switch-session-wallet` | yes | Rotate active wallet context in session |
 | GET    | `/ton-connect/wallets`    | yes  | List the current user's linked wallets     |
 
-### Wiring with `@tonconnect/ui-react`
+Lifecycle hooks:
 
-The plugin works with any TON Connect client, but the official
-`@tonconnect/ui-react` package is the smoothest fit. There are two
-pieces: refresh the challenge the wallet will sign, and handle the
-`ton_proof` reply when the wallet connects.
+- `onChallengeIssued`
+- `onVerifySuccess`
+- `onVerifyFail`
+- `onWalletLinked`
+
+### Wiring with `@tonconnect/ui-react` (recommended)
+
+Use the built-in React helper from `ton-better-auth/react`. It wraps
+challenge refresh + verify lifecycle + typed error states:
 
 ```tsx
-import {
-  useTonConnectUI,
-  useTonWallet,
-} from "@tonconnect/ui-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
+import { useTonConnectAuth } from "ton-better-auth/react";
 import { authClient } from "./auth-client";
-
-// Refresh the challenge roughly every 9 min — TON Connect signatures
-// are valid for 15 min in this plugin, so we stay comfortably fresh.
-const REFRESH_INTERVAL_MS = 9 * 60 * 1000;
 
 export function SignInButton() {
   const [tonConnectUI] = useTonConnectUI();
   const wallet = useTonWallet();
-  const [authed, setAuthed] = useState(false);
-  const firstLoad = useRef(true);
+  const {
+    authenticated,
+    status,
+    error,
+    disconnect,
+    refreshChallenge,
+  } = useTonConnectAuth({
+    tonConnectUI,
+    authClient,
+    refreshIntervalMs: 9 * 60 * 1000,
+    // Optional when server captcha checks are enabled.
+    getCaptchaToken: async ({ phase }) =>
+      phase === "challenge" ? window.localStorage.getItem("captcha-token") : null,
+    onError: (e) => console.error(e.code, e.message),
+  });
 
-  // (1) Keep the wallet supplied with a fresh challenge payload.
-  const refreshChallenge = useCallback(async () => {
-    if (firstLoad.current) {
-      // Show the wallet a "loading" state while we hit our backend.
-      tonConnectUI.setConnectRequestParameters({ state: "loading" });
-      firstLoad.current = false;
-    }
-
-    const { data, error } = await authClient.tonConnect.challenge();
-
-    if (error || !data?.payload) {
-      tonConnectUI.setConnectRequestParameters(null);
-      return;
-    }
-
-    tonConnectUI.setConnectRequestParameters({
-      state: "ready",
-      value: { tonProof: data.payload },
-    });
-  }, [tonConnectUI]);
-
-  useEffect(() => {
-    void refreshChallenge();
-    const id = setInterval(() => {
-      void refreshChallenge();
-    }, REFRESH_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [refreshChallenge]);
-
-  // (2) Verify the ton_proof once the wallet sends it back.
-  useEffect(() => {
-    return tonConnectUI.onStatusChange(async (w) => {
-      if (!w) {
-        setAuthed(false);
-        return;
-      }
-      const item = w.connectItems?.tonProof;
-      if (!item || !("proof" in item)) return;
-
-      const { error } = await authClient.tonConnect.verify({
-        address: w.account.address,
-        network: w.account.chain,
-        public_key: w.account.publicKey!,
-        proof: {
-          timestamp: item.proof.timestamp,
-          domain: item.proof.domain,
-          payload: item.proof.payload,
-          signature: item.proof.signature,
-          state_init: w.account.walletStateInit,
-        },
-      });
-
-      if (error) {
-        await tonConnectUI.disconnect();
-        setAuthed(false);
-        return;
-      }
-      setAuthed(true);
-    });
-  }, [tonConnectUI]);
-
-  if (authed) {
+  if (authenticated) {
     return (
-      <button onClick={() => tonConnectUI.disconnect()}>
-        Disconnect {wallet?.account.address.slice(0, 6)}…
+      <button onClick={() => void disconnect()}>
+        Disconnect {wallet?.account.address.slice(0, 6)}...
       </button>
     );
   }
-  return <button onClick={() => tonConnectUI.openModal()}>Sign in</button>;
+
+  return (
+    <button
+      onClick={() => {
+        void refreshChallenge();
+        void tonConnectUI.openModal();
+      }}
+      disabled={status === "loading-challenge" || status === "verifying"}
+      title={error?.message}
+    >
+      Sign in with TON
+    </button>
+  );
 }
 ```
 
-Two patterns worth noting here:
+`useTonConnectAuth` exposes:
 
-- `setConnectRequestParameters` is called from a `useEffect` (plus an
-  interval). Calling it on every render would force React to re-register
-  the request mid-flight and confuse the wallet UI.
-- `onStatusChange` returns an **unsubscribe function**, and `useEffect`
-  cleanups run that function when the component unmounts. Otherwise
-  every remount stacks another listener and your `/verify` endpoint gets
-  called multiple times per connect.
+- `status`: `idle | loading-challenge | ready | verifying | authenticated | error`
+- `error`: typed error object with stable `code`
+- `refreshChallenge()` and `disconnect()` helpers
+- optional `getCaptchaToken` callback for captcha-protected flows
+- lifecycle callbacks like `onVerified` / `onError`
 
 ## What gets stored
 
@@ -207,10 +198,14 @@ Two patterns worth noting here:
   as `accountId`.
 - A row in the plugin's `tonWallet` table holding `address`, `publicKey`,
   `network`, `isPrimary`, `createdAt`, linked to the user via `userId`.
+- Session metadata `activeTonWalletAddress` and `activeTonWalletNetwork`
+  so wallet-scoped dApps can switch active context without switching user.
 
 A user may link additional wallets through `/ton-connect/link`; the first
 is flagged as primary, and the plugin refuses to unlink the last one so
-the account can't be locked out.
+the account can't be locked out. Use `/ton-connect/set-primary` to choose
+the primary wallet explicitly, and `/ton-connect/switch-session-wallet`
+to rotate the active wallet for the current session.
 
 ## Security notes
 
@@ -218,10 +213,11 @@ the account can't be locked out.
   consumed atomically via `consumeVerificationValue`, so a valid
   `ton_proof` can only be used once.
 - Signatures older than `validAuthTimeSec` are rejected.
-- The signed app domain must match one of `allowedDomains` exactly
-  (case-sensitive, include the port in dev).
-- `challenge` and `verify` are rate-limited to 20 requests / 60s by
-  default via the plugin's `rateLimit` rule.
+- Domain policy supports exact entries, wildcard patterns (`*`), and
+  per-network rules (`mainnet`/`testnet` or `-239`/`-3`).
+- Anti-abuse controls include per-IP and per-address limits, failed
+  verification cooldown, and optional captcha challenge/verify hooks.
+  Default verify limits: `20/ip/min`, `8/address/min`.
 - The verifier follows the reference implementation from the TON
   Connect demo dApp — it parses the `walletStateInit` to extract the
   public key, cross-checks it against the client-reported `public_key`,

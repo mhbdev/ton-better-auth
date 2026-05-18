@@ -9,6 +9,8 @@
  *   authClient.tonConnect.verify({ address, network, public_key, proof })
  *   authClient.tonConnect.link({ address, network, public_key, proof })
  *   authClient.tonConnect.unlink({ address })
+ *   authClient.tonConnect.setPrimary({ address })
+ *   authClient.tonConnect.switchSessionWallet({ address })
  *   authClient.tonConnect.wallets()
  */
 import type { BetterAuthClientPlugin } from "better-auth";
@@ -24,6 +26,8 @@ export const tonConnectClient = () => {
       "/ton-connect/verify": "POST",
       "/ton-connect/link": "POST",
       "/ton-connect/unlink": "POST",
+      "/ton-connect/set-primary": "POST",
+      "/ton-connect/switch-session-wallet": "POST",
       "/ton-connect/wallets": "GET",
     },
   } satisfies BetterAuthClientPlugin;

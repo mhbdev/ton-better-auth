@@ -4,6 +4,7 @@ export default defineConfig({
   entry: {
     index: "src/index.ts",
     client: "src/client.ts",
+    react: "src/react.ts",
   },
   format: ["esm", "cjs"],
   dts: true,
@@ -19,6 +20,7 @@ export default defineConfig({
     "@ton/core",
     "@ton/crypto",
     "@ton/ton",
+    "react",
     "tweetnacl",
     "zod",
   ],

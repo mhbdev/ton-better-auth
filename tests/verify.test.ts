@@ -81,4 +81,51 @@ describe("verifyTonProof", () => {
     expect(result.ok).toBe(false);
     expect(result.reason).toBe("public_key_mismatch");
   });
+
+  it("accepts wildcard domain policies", async () => {
+    const { request } = await buildSignedProof({
+      domain: "api.dev.example.com",
+      payload: "challenge-value-1234",
+    });
+
+    const result = await verifyTonProof(request, {
+      allowedDomains: ["*.example.com"],
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("supports per-network domain policies", async () => {
+    const { request } = await buildSignedProof({
+      domain: "testnet.localhost:3000",
+      payload: "challenge-value-1234",
+      network: "-3",
+    });
+
+    const result = await verifyTonProof(request, {
+      allowedDomains: {
+        mainnet: ["mainnet.localhost:3000"],
+        testnet: ["testnet.localhost:3000"],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects when no domain policy matches the request network", async () => {
+    const { request } = await buildSignedProof({
+      domain: "testnet.localhost:3000",
+      payload: "challenge-value-1234",
+      network: "-3",
+    });
+
+    const result = await verifyTonProof(request, {
+      allowedDomains: {
+        "-239": ["mainnet.localhost:3000"],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("domain_not_allowed");
+  });
 });
