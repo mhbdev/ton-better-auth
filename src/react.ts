@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { BetterAuthClientOptions, InferClientAPI } from "better-auth/client";
 
+import type { TonConnectClientPlugin } from "./client.js";
 import type { TonChain, TonProofRequest } from "./types.js";
 
 type Awaitable<T> = T | Promise<T>;
@@ -61,17 +63,12 @@ export interface TonConnectUILike {
   disconnect?: () => void | Promise<void>;
 }
 
+type TonConnectInferredApi = InferClientAPI<
+  BetterAuthClientOptions & { plugins: [TonConnectClientPlugin] }
+>;
+
 export interface TonConnectClientLike {
-  tonConnect: {
-    challenge: (...args: unknown[]) => Promise<{
-      data?: { payload?: string; expiresAt?: number };
-      error?: unknown;
-    }>;
-    verify: (...args: unknown[]) => Promise<{
-      data?: unknown;
-      error?: unknown;
-    }>;
-  };
+  tonConnect: Pick<TonConnectInferredApi["tonConnect"], "challenge" | "verify">;
 }
 
 export interface UseTonConnectAuthOptions {
@@ -256,9 +253,20 @@ export function useTonConnectAuth(
       }
     }
 
-    const { data, error: challengeError } = await authClient.tonConnect.challenge(
-      challengeToken ? { captchaToken: challengeToken } : undefined,
-    );
+    const challengeInput: Parameters<
+      TonConnectClientLike["tonConnect"]["challenge"]
+    >[0] = challengeToken
+      ? {
+          fetchOptions: {
+            body: {
+              captchaToken: challengeToken,
+            },
+          },
+        }
+      : undefined;
+
+    const { data, error: challengeError } =
+      await authClient.tonConnect.challenge(challengeInput);
     if (challengeError) {
       tonConnectUI.setConnectRequestParameters(null);
       reportError(
