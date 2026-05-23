@@ -1,5 +1,11 @@
 # ton-better-auth
 
+## 0.2.1
+
+### Patch Changes
+
+- [`fd335da`](https://github.com/mhbdev/ton-better-auth/commit/fd335da576f27a33b7f0c9a545c39d1ea8dc432d) Thanks [@mhbdev](https://github.com/mhbdev)! - Adjusted the hook’s client contract so createAuthClient(...).tonConnect is assignable without TS2322.
+
 ## 0.2.0
 
 ### Minor Changes
