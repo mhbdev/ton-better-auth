@@ -63,11 +63,11 @@ export interface TonConnectUILike {
 
 export interface TonConnectClientLike {
   tonConnect: {
-    challenge: (input?: unknown) => Promise<{
+    challenge: (...args: unknown[]) => Promise<{
       data?: { payload?: string; expiresAt?: number };
       error?: unknown;
     }>;
-    verify: (input: TonProofRequest) => Promise<{
+    verify: (...args: unknown[]) => Promise<{
       data?: unknown;
       error?: unknown;
     }>;
