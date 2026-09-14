@@ -13,7 +13,7 @@
 import {
   APIError,
   createAuthEndpoint,
-  getIp,
+  getIP,
   getSessionFromCtx,
   sessionMiddleware,
 } from "better-auth/api";
@@ -765,7 +765,7 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
         },
         async (ctx) => {
           const headers = getHeaders(ctx);
-          const ip = getIp(headers ?? new Headers(), ctx.context.options);
+          const ip = getIP(headers ?? new Headers(), ctx.context.options);
           const userAgent = getUserAgent(headers);
           const useSecondaryStorage = shouldUseSecondaryStorage(
             antiAbuse.storage,
@@ -853,7 +853,7 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
         async (ctx) => {
           const body = ctx.body;
           const headers = getHeaders(ctx);
-          const ip = getIp(headers ?? new Headers(), ctx.context.options);
+          const ip = getIP(headers ?? new Headers(), ctx.context.options);
           const userAgent = getUserAgent(headers);
           const useSecondaryStorage = shouldUseSecondaryStorage(
             antiAbuse.storage,
@@ -1105,7 +1105,7 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
               email,
               emailVerified: false,
               image: lookup?.image ?? null,
-            });
+            }, { method: "ton-connect" });
 
             if (!user) {
               throw new APIError("INTERNAL_SERVER_ERROR", {
@@ -1219,7 +1219,7 @@ export const tonConnect = (options: TonConnectPluginOptions) => {
           const body = ctx.body;
           const user = ctx.context.session.user;
           const headers = getHeaders(ctx);
-          const ip = getIp(headers ?? new Headers(), ctx.context.options);
+          const ip = getIP(headers ?? new Headers(), ctx.context.options);
           const userAgent = getUserAgent(headers);
 
           if (!ctx.context.internalAdapter?.consumeVerificationValue) {
