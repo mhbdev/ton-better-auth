@@ -61,6 +61,7 @@ export interface TonConnectUILike {
     callback: (wallet: TonConnectWalletLike | null) => void | Promise<void>,
   ) => () => void;
   disconnect?: () => void | Promise<void>;
+  openModal?: () => void | Promise<void>;
 }
 
 type TonConnectInferredApi = InferClientAPI<
@@ -100,6 +101,8 @@ export interface UseTonConnectAuthResult {
   refreshChallenge: () => Promise<boolean>;
   disconnect: () => Promise<void>;
   clearError: () => void;
+  /** Refreshes the proof payload and opens the wallet modal after it is ready. */
+  openModal: () => Promise<boolean>;
 }
 
 const DEFAULT_REFRESH_INTERVAL_MS = 9 * 60 * 1000;
@@ -214,6 +217,7 @@ export function useTonConnectAuth(
 
   const firstChallengeLoadRef = useRef(true);
   const lastVerifiedProofRef = useRef<string | null>(null);
+  const refreshInFlightRef = useRef<Promise<boolean> | null>(null);
 
   const reportError = useCallback(
     (nextError: TonConnectAuthError) => {
@@ -225,6 +229,8 @@ export function useTonConnectAuth(
   );
 
   const refreshChallenge = useCallback(async (): Promise<boolean> => {
+    if (refreshInFlightRef.current) return refreshInFlightRef.current;
+    const operation = (async (): Promise<boolean> => {
     if (!enabled) return false;
 
     if (firstChallengeLoadRef.current) {
@@ -300,7 +306,20 @@ export function useTonConnectAuth(
       value: { tonProof: data.payload },
     });
     return true;
+    })();
+    refreshInFlightRef.current = operation;
+    try {
+      return await operation;
+    } finally {
+      refreshInFlightRef.current = null;
+    }
   }, [authClient, enabled, getCaptchaToken, reportError, tonConnectUI]);
+
+  const openModal = useCallback(async () => {
+    const ready = await refreshChallenge();
+    if (ready) await tonConnectUI.openModal?.();
+    return ready;
+  }, [refreshChallenge, tonConnectUI]);
 
   const disconnect = useCallback(async () => {
     await tonConnectUI.disconnect?.();
@@ -411,5 +430,6 @@ export function useTonConnectAuth(
     refreshChallenge,
     disconnect,
     clearError,
+    openModal,
   };
 }

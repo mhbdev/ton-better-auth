@@ -5,10 +5,9 @@ description: >
   This skill guides agents through setting up "Sign in with TON" using ton_proof verification,
   configuring the server plugin, wiring up the client, and connecting with @tonconnect/ui-react.
 license: MIT
-compatibility: Requires better-auth (>=1.3.0) and @better-auth/core
 metadata:
   author: mhbdev
-  version: "0.1.2"
+  version: "0.3.0"
   repository: https://github.com/mhbdev/ton-better-auth
 ---
 
@@ -34,7 +33,7 @@ Integrate TON Connect wallet authentication into Better Auth projects using the 
 npm install ton-better-auth
 ```
 
-Peer dependencies: `better-auth` (>= 1.3) and `@better-auth/core`.
+Peer dependencies: `better-auth` and `@better-auth/core` (1.7+).
 Optional peer dependency for React helper: `react` (>= 18).
 
 ## Quick Start
@@ -209,7 +208,7 @@ import { authClient } from "./auth-client";
 export function SignInButton() {
   const [tonConnectUI] = useTonConnectUI();
   const wallet = useTonWallet();
-  const { authenticated, status, error, disconnect, refreshChallenge } =
+  const { authenticated, status, error, disconnect, openModal } =
     useTonConnectAuth({
       tonConnectUI,
       authClient,
@@ -230,10 +229,7 @@ export function SignInButton() {
 
   return (
     <button
-      onClick={() => {
-        void refreshChallenge();
-        void tonConnectUI.openModal();
-      }}
+      onClick={() => void openModal()}
       disabled={status === "loading-challenge" || status === "verifying"}
       title={error?.message}
     >
@@ -276,7 +272,7 @@ if (!result.ok) {
 
 | Runtime | Setup Required |
 |---------|----------------|
-| Node.js 18+ | None (works out of the box) |
+| Node.js 20.19+ | None (works out of the box) |
 | Bun | None (Buffer provided) |
 | Cloudflare Workers | Enable `nodejs_compat` flag in wrangler.toml |
 | Vercel Edge Runtime | Use Node.js runtime (default) or add Buffer polyfill |

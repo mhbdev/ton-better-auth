@@ -26,6 +26,7 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
+    "ignoreDeprecations": "6.0",
 
     "declaration": true,
     "declarationMap": true,

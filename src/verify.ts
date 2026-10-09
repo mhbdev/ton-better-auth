@@ -42,6 +42,8 @@ export interface VerifyTonProofOptions {
   getWalletPublicKey?: GetWalletPublicKey;
   /** Only let allowed wallet versions to be verified */
   allowedWalletVersions?: TonWalletVersion[];
+  /** Maximum clock skew accepted for signatures from the future. Defaults to 60 seconds. */
+  maxFutureTimeSec?: number;
 }
 
 export interface VerifyTonProofResult {
@@ -138,6 +140,10 @@ export async function verifyTonProof(
       request.network,
       options.allowedDomainsByNetwork,
     );
+    const domainBytes = Buffer.from(request.proof.domain.value, "utf8");
+    if (request.proof.domain.lengthBytes !== domainBytes.length) {
+      return { ok: false, reason: "domain_length_mismatch" };
+    }
     const requestDomain = normalizeDomain(request.proof.domain.value);
     const domainOk = allowedDomains.some((pattern) =>
       matchDomain(requestDomain, pattern),
@@ -151,10 +157,13 @@ export async function verifyTonProof(
     if (now - validAuthTime > request.proof.timestamp) {
       return { ok: false, reason: "signature_expired" };
     }
+    if (request.proof.timestamp > now + (options.maxFutureTimeSec ?? 60)) {
+      return { ok: false, reason: "signature_from_future" };
+    }
 
     // Reconstruct the signed message.
     const wc = Buffer.alloc(4);
-    wc.writeUInt32BE(derivedAddress.workChain, 0);
+    wc.writeInt32BE(derivedAddress.workChain, 0);
 
     const ts = Buffer.alloc(8);
     ts.writeBigUInt64LE(BigInt(request.proof.timestamp), 0);
@@ -167,7 +176,7 @@ export async function verifyTonProof(
       wc,
       derivedAddress.hash,
       dl,
-      Buffer.from(request.proof.domain.value),
+      domainBytes,
       ts,
       Buffer.from(request.proof.payload),
     ]);

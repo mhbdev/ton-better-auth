@@ -24,7 +24,7 @@ Integrate TON Connect wallet authentication into Better Auth projects. Covers:
 ### ton-better-auth-runtime
 
 Handle runtime compatibility across different JavaScript environments:
-- Node.js 18+ / Bun (no setup needed)
+- Node.js 20.19+ / Bun (no setup needed)
 - Cloudflare Workers (nodejs_compat flag)
 - Vercel Edge Runtime (polyfills or Node.js runtime)
 - Deno (node:buffer import)

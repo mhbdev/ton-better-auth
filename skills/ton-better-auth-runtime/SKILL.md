@@ -4,10 +4,9 @@ description: >
   Handle runtime compatibility for ton-better-auth across different environments (Node.js, Bun, Cloudflare Workers, Vercel Edge, Deno, Browser).
   This skill provides specific configuration for each runtime to ensure Buffer and other Node.js primitives are available.
 license: MIT
-compatibility: Works with all JavaScript runtimes
 metadata:
   author: mhbdev
-  version: "0.1.1"
+  version: "0.3.0"
   repository: https://github.com/mhbdev/ton-better-auth
 ---
 
@@ -19,7 +18,7 @@ Configure `ton-better-auth` for different JavaScript runtimes. The package depen
 
 | Runtime | Buffer Available | Setup Required | Notes |
 |---------|------------------|----------------|-------|
-| Node.js 18+ | Yes | None | Works out of the box |
+| Node.js 20.19+ | Yes | None | Works out of the box |
 | Bun | Yes | None | `Buffer` provided out of the box |
 | Cloudflare Workers | With flag | Enable `nodejs_compat` | Requires compatibility flag |
 | Vercel Edge Runtime | No | Use Node.js runtime or polyfill | Edge runtime doesn't polyfill `Buffer` |
@@ -28,7 +27,7 @@ Configure `ton-better-auth` for different JavaScript runtimes. The package depen
 
 ## Configuration by Runtime
 
-### Node.js 18+
+### Node.js 20.19+
 
 No configuration needed. `Buffer` is globally available.
 

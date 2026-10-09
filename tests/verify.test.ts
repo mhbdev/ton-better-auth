@@ -82,6 +82,34 @@ describe("verifyTonProof", () => {
     expect(result.reason).toBe("public_key_mismatch");
   });
 
+  it("rejects a signature from too far in the future", async () => {
+    const { request } = await buildSignedProof({
+      domain: DOMAIN,
+      payload: "challenge-value-1234",
+      timestamp: Math.floor(Date.now() / 1000) + 61,
+    });
+    const result = await verifyTonProof(request, { allowedDomains: [DOMAIN] });
+    expect(result).toEqual({ ok: false, reason: "signature_from_future" });
+  });
+
+  it("rejects an incorrect domain byte length", async () => {
+    const { request } = await buildSignedProof({
+      domain: DOMAIN,
+      payload: "challenge-value-1234",
+    });
+    const result = await verifyTonProof(
+      {
+        ...request,
+        proof: {
+          ...request.proof,
+          domain: { ...request.proof.domain, lengthBytes: 1 },
+        },
+      },
+      { allowedDomains: [DOMAIN] },
+    );
+    expect(result).toEqual({ ok: false, reason: "domain_length_mismatch" });
+  });
+
   it("accepts wildcard domain policies", async () => {
     const { request } = await buildSignedProof({
       domain: "api.dev.example.com",

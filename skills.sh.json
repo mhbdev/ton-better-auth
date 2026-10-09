@@ -1,0 +1,16 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "TON Authentication",
+      "description": "Integrate TON Connect wallet authentication with Better Auth.",
+      "skills": ["ton-better-auth"]
+    },
+    {
+      "title": "Runtime Setup",
+      "description": "Configure supported JavaScript runtimes and bundlers.",
+      "skills": ["ton-better-auth-runtime"]
+    }
+  ]
+}

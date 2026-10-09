@@ -27,7 +27,7 @@ cookie after a successful TON wallet sign-in.
 npm install ton-better-auth
 ```
 
-Peer dependencies: `better-auth` (>= 1.3) and `@better-auth/core`.
+Peer dependencies: `better-auth` and `@better-auth/core` (1.7+).
 Optional peer for `ton-better-auth/react`: `react` (>= 18).
 
 ## Server setup
@@ -149,6 +149,7 @@ export function SignInButton() {
     error,
     disconnect,
     refreshChallenge,
+    openModal,
   } = useTonConnectAuth({
     tonConnectUI,
     authClient,
@@ -169,10 +170,7 @@ export function SignInButton() {
 
   return (
     <button
-      onClick={() => {
-        void refreshChallenge();
-        void tonConnectUI.openModal();
-      }}
+      onClick={() => void openModal()}
       disabled={status === "loading-challenge" || status === "verifying"}
       title={error?.message}
     >
@@ -186,7 +184,7 @@ export function SignInButton() {
 
 - `status`: `idle | loading-challenge | ready | verifying | authenticated | error`
 - `error`: typed error object with stable `code`
-- `refreshChallenge()` and `disconnect()` helpers
+- `refreshChallenge()`, `openModal()` and `disconnect()` helpers. `openModal()` waits for a fresh challenge before opening the wallet UI, avoiding stale or missing proof payloads.
 - optional `getCaptchaToken` callback for captcha-protected flows
 - lifecycle callbacks like `onVerified` / `onError`
 
@@ -251,7 +249,7 @@ if (!result.ok) {
 `tweetnacl`. These libraries expect Node.js primitives — primarily the
 global `Buffer` — to be available at runtime.
 
-- **Node.js 18+** — no setup needed.
+- **Node.js 20.19+** — no setup needed.
 - **Bun** — `Buffer` is provided out of the box.
 - **Cloudflare Workers** — enable the Node.js compatibility flag:
   ```toml

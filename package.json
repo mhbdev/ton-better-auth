@@ -1,6 +1,6 @@
 {
   "name": "ton-better-auth",
-  "version": "0.2.4",
+  "version": "0.2.3",
   "description": "Better Auth plugin for TON Connect — sign in with TON wallets using ton_proof.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -26,7 +26,9 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "skills",
+    "skills.sh.json"
   ],
   "scripts": {
     "build": "tsup",
@@ -62,8 +64,8 @@
   },
   "homepage": "https://github.com/mhbdev/ton-better-auth#readme",
   "peerDependencies": {
-    "@better-auth/core": ">=1.3.0",
-    "better-auth": ">=1.3.0",
+    "@better-auth/core": "^1.7.7",
+    "better-auth": "^1.7.7",
     "react": ">=18"
   },
   "peerDependenciesMeta": {
@@ -72,32 +74,32 @@
     }
   },
   "dependencies": {
-    "@ton/core": "^0.63.0",
+    "@ton/core": "^0.63.1",
     "@ton/crypto": "^3.3.0",
-    "@ton/ton": "^16.2.2",
+    "@ton/ton": "^16.3.0",
     "tweetnacl": "^1.0.3",
-    "zod": "^4.0.0"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@changesets/changelog-github": "^0.7.0",
-    "@changesets/cli": "^2.31.0",
+    "@changesets/changelog-github": "^1.0.1",
+    "@changesets/cli": "^3.0.3",
     "@eslint/js": "^10.0.1",
-    "@types/better-sqlite3": "^7.6.12",
-    "@types/node": "^22.10.0",
-    "@types/react": "^19.2.2",
-    "@typescript-eslint/eslint-plugin": "^8.59.3",
-    "@typescript-eslint/parser": "^8.59.3",
-    "better-auth": "^1.7.4",
-    "@better-auth/core": "^1.7.4",
-    "better-sqlite3": "^12.0.0",
-    "eslint": "^10.3.0",
-    "globals": "^17.6.0",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.71.1",
+    "@typescript-eslint/parser": "^8.71.1",
+    "@better-auth/core": "^1.7.7",
+    "better-auth": "^1.7.7",
+    "better-sqlite3": "^13.0.3",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0",
     "tsup": "^8.5.1",
-    "typescript": "^5.7.0",
-    "vitest": "^4.1.6"
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.3"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19.0"
   },
   "publishConfig": {
     "access": "public"

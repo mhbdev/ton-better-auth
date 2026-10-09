@@ -85,7 +85,7 @@ const verifyBodySchema = z.object({
   network: tonChain,
   public_key: z.string().regex(/^[0-9a-fA-F]{64}$/),
   proof: z.object({
-    timestamp: z.number().int().positive(),
+    timestamp: z.coerce.number().int().positive(),
     domain: z.object({
       lengthBytes: z.number().int().positive(),
       value: z.string().min(1),
