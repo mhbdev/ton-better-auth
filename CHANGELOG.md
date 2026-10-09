@@ -1,5 +1,11 @@
 # ton-better-auth
 
+## 0.3.0
+
+### Minor Changes
+
+- [`1983f95`](https://github.com/mhbdev/ton-better-auth/commit/1983f95c980bad193266013ee42ee3b7aba67de4) Thanks [@mhbdev](https://github.com/mhbdev)! - Harden TON proof verification with domain byte-length and future-clock-skew checks, add a race-safe React `openModal` helper that refreshes the challenge before opening wallet UI, update runtime and agent skill packaging, and publish through npm trusted publishing in GitHub Actions.
+
 ## 0.2.1
 
 ### Patch Changes
