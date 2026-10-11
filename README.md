@@ -76,11 +76,10 @@ export const auth = betterAuth({
           console.log("TON verify success", event.userId, event.address);
         },
       },
-      // Optional: fallback when state-init parsing fails (rare).
-      // Called as getWalletPublicKey(address, network).
-      getWalletPublicKey: async (address) => {
-        // e.g. use @ton/ton's TonClient to call the wallet's get_public_key.
-        return null;
+      // Configure this for non-standard wallets such as Gram Wallet.
+      // Called only when the verifier cannot extract a key from walletStateInit.
+      getWalletPublicKey: async (address, network) => {
+        return getPublicKeyFromChain(address, network);
       },
       // Optional: enrich new users with a name / avatar from TON DNS.
       addressLookup: async ({ address }) => ({ name: "Alice", image: "…" }),
@@ -88,6 +87,49 @@ export const auth = betterAuth({
   ],
 });
 ```
+
+### On-chain public-key fallback
+
+The verifier extracts keys from recognized wallet versions first. For other
+wallet contracts, configure `getWalletPublicKey` to call the contract's
+`get_public_key` get method through a trusted TON RPC provider. This callback is
+opt-in; without it, proofs from unrecognized wallet contracts are rejected.
+Install `@ton/ton` as a direct dependency, select the RPC endpoint from the
+supplied `network`, and return the 32-byte key as a `Buffer` (or `null` if the
+lookup fails). Keep provider credentials on the server:
+
+```ts
+import { Address, TonClient } from "@ton/ton";
+
+const tonClients = {
+  "-239": new TonClient({
+    endpoint: process.env.TON_MAINNET_RPC_URL!,
+    apiKey: process.env.TON_MAINNET_RPC_API_KEY,
+  }),
+  "-3": new TonClient({
+    endpoint: process.env.TON_TESTNET_RPC_URL!,
+    apiKey: process.env.TON_TESTNET_RPC_API_KEY,
+  }),
+};
+
+async function getPublicKeyFromChain(
+  address: string,
+  network: "-239" | "-3",
+): Promise<Buffer | null> {
+  try {
+    const { stack } = await tonClients[network].runMethod(
+      Address.parse(address),
+      "get_public_key",
+    );
+    const hex = stack.readBigNumber().toString(16).padStart(64, "0");
+    return /^[0-9a-f]{64}$/i.test(hex) ? Buffer.from(hex, "hex") : null;
+  } catch {
+    return null;
+  }
+}
+```
+
+See TON's [on-chain fallback guidance](https://docs.ton.org/applications/ton-connect/how-to/ton-proof#from-on-chain-get_public_key-fallback).
 
 Run the CLI to generate / apply the `tonWallet` table:
 
