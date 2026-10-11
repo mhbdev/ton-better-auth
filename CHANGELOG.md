@@ -1,5 +1,12 @@
 # ton-better-auth
 
+## 0.3.1
+
+### Patch Changes
+
+- [#6](https://github.com/mhbdev/ton-better-auth/pull/6) [`913e668`](https://github.com/mhbdev/ton-better-auth/commit/913e668c0d2f4a55772d775b4f35d888a52e335e) Thanks [@mhbdev](https://github.com/mhbdev)! - Document the network-aware on-chain `get_public_key` fallback required for
+  non-standard TON Connect wallets such as Gram Wallet.
+
 ## 0.3.0
 
 ### Minor Changes
