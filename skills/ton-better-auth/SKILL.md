@@ -100,10 +100,12 @@ tonConnect({
   // Optional: email domain for synthesized user emails
   emailDomain: "ton.local",
   
-  // Optional: fallback when state-init parsing fails
+  // Configure this for non-standard wallets such as Gram Wallet.
+  // Called when the verifier cannot extract a key from walletStateInit.
   getWalletPublicKey: async (address, network) => {
-    // Use @ton/ton's TonClient to call get_public_key
-    return null;
+    // Use a trusted TON RPC provider to call get_public_key.
+    // Return the 32-byte result as a Buffer, or null if unavailable.
+    return getPublicKeyFromChain(address, network);
   },
   
   // Optional: enrich new users from TON DNS
@@ -144,6 +146,11 @@ tonConnect({
   },
 });
 ```
+
+`getWalletPublicKey` is opt-in. Without it, proofs from wallet contracts not
+recognized by the built-in wallet-state parser are rejected. Configure a
+network-aware on-chain `get_public_key` lookup for Gram Wallet and other
+non-standard wallets, following the [TON proof documentation](https://docs.ton.org/applications/ton-connect/how-to/ton-proof#from-on-chain-get_public_key-fallback).
 
 ## Available Endpoints
 
